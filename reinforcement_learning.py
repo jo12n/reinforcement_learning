@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import os
+import time
 
 # --- Pygame configuration---
 WIDTH, HEIGHT = 600, 600
@@ -37,8 +38,8 @@ BATCH_SIZE = 64        # Size of the batch
 GAMMA = 0.99         # Discount Factor
 EPSILON_START = 1.0  # Initial epsilon for exploration
 EPSILON_END = 0.05   # Minimum epsilon
-EPSILON_DECAY = 0.9995 # Epsilon reduction rate per episode
-LR = 0.001           # Learning Rate to optimise the network
+EPSILON_DECAY = 0.9999 # Epsilon reduction rate per episode
+LR = 0.0002           # Learning Rate to optimise the network
 TARGET_UPDATE = 10   # Update the network after this number of episodes
 MEMORY_SIZE = 10000  # Max size of the replay buffer
 
@@ -56,12 +57,12 @@ ACTIONS = {
 NUM_ACTIONS = len(ACTIONS)
 
 # State dimension (input for the neural network)
-STATE_SIZE = 2
+STATE_SIZE = 8
 
-MODEL_PATH = 'dqn_agent_model.pth' # The file of a model who was trained
+MODEL_PATH = 'dqn_agent_model_wall_pen2.pth' # The file of a model who was trained
 
 # --- Option to load a model ---
-LOAD_MODEL = True
+LOAD_MODEL = False
 # CPU or GPU
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -70,9 +71,9 @@ print(f"Using device: {device}")
 class DQN(nn.Module):
     def __init__(self, input_size, output_size):
         super().__init__()
-        self.fc1 = nn.Linear(input_size, 128)
-        self.fc2 = nn.Linear(128, 128)
-        self.fc3 = nn.Linear(128, output_size)
+        self.fc1 = nn.Linear(input_size, 64)
+        self.fc2 = nn.Linear(64, 64)
+        self.fc3 = nn.Linear(64, output_size)
 
     def forward(self, x):
         x = x.view(-1, STATE_SIZE)
@@ -99,13 +100,21 @@ class ReplayMemory:
 
 # --- Funciones Auxiliares ---
 
-def get_random_position():
+def get_random_position(object):
     """Generate a random position in the grid."""
-    x = random.randint(0, CELL_WIDTH - 1) * GRID_SIZE
-    y = random.randint(0, CELL_HEIGHT - 1) * GRID_SIZE
+    if object == 0:
+        x = random.randint(0, round((CELL_WIDTH - 1)/4)-1) * GRID_SIZE
+        y = random.randint(0, CELL_HEIGHT - 1) * GRID_SIZE
+    elif object == 1:
+        x = random.randint(round((CELL_WIDTH - 1)/4)-1, round(3*(CELL_WIDTH - 1)/4)-1) * GRID_SIZE
+        y = random.randint(0, CELL_HEIGHT - 1) * GRID_SIZE
+    elif object == 2:
+        x = random.randint(round(3*(CELL_WIDTH - 1)/4)-1, CELL_HEIGHT - 1) * GRID_SIZE
+        y = random.randint(0, CELL_HEIGHT - 1) * GRID_SIZE
     return x, y
 
-def get_state_vector(player_x, player_y, target_x, target_y):
+'''
+def get_state_vector(player_x, player_y, target_x, target_y, nowall_x, nowall_y):
     """
     Compute the actual state as a vector for the neural network.
     Normalize the relative distances (dx, dy).
@@ -114,11 +123,76 @@ def get_state_vector(player_x, player_y, target_x, target_y):
     player_grid_y = player_y // CELL_HEIGHT
     target_grid_x = target_x // CELL_WIDTH
     target_grid_y = target_y // CELL_HEIGHT
+    nowall_grid_x = nowall_x // CELL_WIDTH
+    nowall_grid_y = nowall_y // CELL_HEIGHT
 
     dx_norm = (target_grid_x - player_grid_x) / (GRID_SIZE - 1)
     dy_norm = (target_grid_y - player_grid_y) / (GRID_SIZE - 1)
 
-    return torch.tensor([dx_norm, dy_norm], dtype=torch.float32, device=device).unsqueeze(0)
+    if nowall_grid_y == player_grid_y:
+        dx_wall_norm = (player_grid_x) / (GRID_SIZE - 1)
+    else:
+        dx_wall_norm = (player_grid_x-nowall_grid_x) / (GRID_SIZE - 1)
+    
+    if nowall_grid_y == player_grid_y and nowall_grid_x == player_grid_x:
+        dy_wall_norm = 0
+    else:
+        dy_wall_norm = (player_grid_y) / (GRID_SIZE - 1)
+
+    if target_grid_x > player_grid_x:
+        dx_norm = 1
+    else:
+        dx_norm = 0
+
+    if target_grid_y > player_grid_y:
+        dy_norm = 1
+    else:
+        dy_norm = 0
+
+    return torch.tensor([dx_norm, dy_norm, dx_wall_norm, dy_wall_norm], dtype=torch.float32, device=device).unsqueeze(0)
+'''
+def get_state_vector(player_x, player_y, target_x, target_y, nowall_x, nowall_y):
+    if target_x < player_x:
+        target_left = 1
+        target_right = 0
+    elif target_x > player_x:
+        target_left = 0
+        target_right = 1
+    else:
+        target_left = 0
+        target_right = 0
+
+    if target_y < player_y:
+        target_up = 1
+        target_down = 0
+    elif target_y > player_y:
+        target_up = 0
+        target_down = 1
+    else:
+        target_up = 0
+        target_down = 0
+
+    if nowall_x < player_x:
+        nowall_left = 1
+        nowall_right = 0
+    elif nowall_x > player_x:
+        nowall_left = 0
+        nowall_right = 1
+    else:
+        nowall_left = 0
+        nowall_right = 0
+
+    if nowall_y < player_y:
+        nowall_up = 1
+        nowall_down = 0
+    elif nowall_y > player_y:
+        nowall_up = 0
+        nowall_down = 1
+    else:
+        nowall_up = 0
+        nowall_down = 0
+
+    return torch.tensor([target_left, target_right, target_up, target_down, nowall_left, nowall_right, nowall_up, nowall_down], dtype=torch.float32, device=device).unsqueeze(0)
 
 def choose_action(state_tensor, epsilon):
     """
@@ -129,23 +203,43 @@ def choose_action(state_tensor, epsilon):
     else:
         with torch.no_grad():
             return policy_net(state_tensor).argmax(1).item()
+        
+def wall_generator(nowall_x, nowall_y):
+    wall1_x = nowall_x
+    wall1_y = 0
+    height_wall1 = nowall_y
+    wall2_x = nowall_x
+    wall2_y = nowall_y + SQUARE_SIZE
+    height_wall2 = HEIGHT - nowall_y - SQUARE_SIZE
+    return wall1_x, wall1_y, wall2_x, wall2_y+1, height_wall1-1, height_wall2
 
 # --- Classes of the game ---
 class Game:
     def __init__(self):
-        self.player_x, self.player_y = get_random_position()
-        self.target_x, self.target_y = get_random_position()
-        self.wall_x, self.wall_y = get_random_position()
+        self.player_x, self.player_y = get_random_position(2)
+        self.target_x, self.target_y = get_random_position(0)
+        self.nowall_x, self.nowall_y = get_random_position(1)
         self.score = 0
         self.game_over = False
 
     def reset(self):
         """Reset the game for a new episode."""
-        self.player_x, self.player_y = get_random_position()
-        self.target_x, self.target_y = get_random_position()
-        self.wall_x, self.wall_y = get_random_position()
-        while (self.player_x == self.target_x and self.player_y == self.target_y):
-            self.target_x, self.target_y = get_random_position()
+        self.var_start = random.randint(0,6)
+        if self.var_start == 0:
+            self.target_x, self.target_y = get_random_position(2)
+            self.player_x, self.player_y = get_random_position(2)
+        elif self.var_start == 1:
+            self.target_x, self.target_y = get_random_position(0)
+            self.player_x, self.player_y = get_random_position(0)
+        elif self.var_start == 2 or self.var_start == 3:
+            self.target_x, self.target_y = get_random_position(0)
+            self.player_x, self.player_y = get_random_position(2)
+        else:
+            self.target_x, self.target_y = get_random_position(2)
+            self.player_x, self.player_y = get_random_position(0)
+        self.nowall_x, self.nowall_y = get_random_position(1)
+        while (self.target_x == self.nowall_x):
+            self.target_x, self.target_y = get_random_position(0)
             
         self.score = 0
         self.game_over = False
@@ -157,27 +251,44 @@ class Game:
         """
         dx, dy = ACTIONS[action_index]
         
-        self.player_x += dx * CELL_WIDTH
-        self.player_y += dy * CELL_HEIGHT
-
+        self.player_x += dx * GRID_SIZE
+        self.player_y += dy * GRID_SIZE
+        
         # Be sure to keep the square inside the screen
         self.player_x = max(0, min(self.player_x, WIDTH - SQUARE_SIZE))
         self.player_y = max(0, min(self.player_y, HEIGHT - SQUARE_SIZE))
-
         # Compute the reward
         reward = -0.1  # Negative reward for every step
         done = False
-
+        # Walls generator
+        self.wall1_x, self.wall1_y, self.wall2_x, self.wall2_y, self.height_wall1, self.height_wall2 = wall_generator(self.nowall_x, self.nowall_y)
         # Check collision
         player_rect = pygame.Rect(self.player_x, self.player_y, SQUARE_SIZE, SQUARE_SIZE)
         target_rect = pygame.Rect(self.target_x, self.target_y, CIRCLE_RADIUS * 2, CIRCLE_RADIUS * 2) 
+        wall1_rect = pygame.Rect(self.wall1_x, self.wall1_y, SQUARE_SIZE, self.height_wall1)
+        wall2_rect = pygame.Rect(self.wall2_x, self.wall2_y, SQUARE_SIZE, self.height_wall2)
+        player_rect_min = pygame.Rect(self.player_x, 0, SQUARE_SIZE, SQUARE_SIZE)
+        player_rect_max = pygame.Rect(self.player_x, HEIGHT-SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE)
 
         if player_rect.colliderect(target_rect):
-            reward = 100  # High reward for eating the circle
+            reward = 200  # High reward for eating the circle
             done = True
             self.score += 1
-
-        next_state_tensor = get_state_vector(self.player_x, self.player_y, self.target_x, self.target_y)
+        elif player_rect.colliderect(wall1_rect) or player_rect.colliderect(wall2_rect):
+            if dy != 0:
+                self.player_x += dx * GRID_SIZE
+                self.player_y -= dy * GRID_SIZE
+            else:
+                self.player_x -= 2*dx * GRID_SIZE
+            reward = -1
+        '''
+        elif player_rect_min.colliderect(wall1_rect) or player_rect_max.colliderect(wall2_rect):
+            if abs(self.target_x-self.player_x ) < abs(self.target_x-self.player_x + dx * GRID_SIZE):
+                reward = 20
+            else:
+                reward = -30
+        '''
+        next_state_tensor = get_state_vector(self.player_x, self.player_y, self.target_x, self.target_y, self.nowall_x, self.nowall_y)
 
         return next_state_tensor, reward, done
 
@@ -185,8 +296,9 @@ class Game:
         """Draw everything on the screen"""
         screen.fill(BLACK)
         pygame.draw.rect(screen, RED, (self.player_x, self.player_y, SQUARE_SIZE, SQUARE_SIZE))
+        pygame.draw.rect(screen, WHITE, (self.wall1_x, self.wall1_y, SQUARE_SIZE, self.height_wall1))
+        pygame.draw.rect(screen, WHITE, (self.wall2_x, self.wall2_y, SQUARE_SIZE, self.height_wall2))
         pygame.draw.circle(screen, BLUE, (self.target_x+CIRCLE_RADIUS, self.target_y+CIRCLE_RADIUS), CIRCLE_RADIUS)
-        pygame.draw.rect(screen, WHITE, (self.wall_x, self.wall_y, SQUARE_SIZE, SQUARE_SIZE))
         pygame.display.flip()
 
 # --- Functions to optimise the network ---
@@ -238,13 +350,13 @@ if LOAD_MODEL and os.path.exists(MODEL_PATH):
 else:
     # Train a new model
     print("No model is saved or LOAD_MODEL is False. Initiating training with DQN...")
-    num_episodes = 5000 # Number of episodes from the training
+    num_episodes = 25000 # Number of episodes from the training
     epsilon = EPSILON_START # Resete epsilon for the training
 
 # --- Main loop for the training ---
 if num_episodes > 0:
     game = Game()
-    num_episodes = 5000
+    num_episodes = 25000
     episodes_rewards = []
     moving_avg_rewards = deque(maxlen=100)
     avg_rewards_plot = []
@@ -253,7 +365,7 @@ if num_episodes > 0:
     print("Initiating train with DQN...")
     for episode in range(num_episodes):
         game.reset()
-        current_state_tensor = get_state_vector(game.player_x, game.player_y, game.target_x, game.target_y)
+        current_state_tensor = get_state_vector(game.player_x, game.player_y, game.target_x, game.target_y, game.nowall_x, game.nowall_y)
         done = False
         total_reward = 0
         steps_in_episode = 0
@@ -306,7 +418,7 @@ if num_episodes > 0:
 
     print("Train with DQN completed.")
 
-    MODEL_SAVE_PATH = 'dqn_agent_model.pth' # Nombre del archivo para guardar
+    MODEL_SAVE_PATH = 'dqn_agent_model_wall_pen3.pth' # Nombre del archivo para guardar
     torch.save(policy_net.state_dict(), MODEL_SAVE_PATH)
     print(f"Model saved in: {MODEL_SAVE_PATH}")
 
@@ -322,7 +434,7 @@ if num_episodes > 0:
 epsilon_simulation = EPSILON_END
 # --- Simulación después del Entrenamiento (agente entrenado) ---
 print("\n--- Completed training! Starting Simulation with DQN Agent ---")
-epsilon = 0.01 
+epsilon = 0.05 
 
 game = Game()
 running = True
@@ -335,7 +447,7 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
-    current_state_tensor = get_state_vector(game.player_x, game.player_y, game.target_x, game.target_y)
+    current_state_tensor = get_state_vector(game.player_x, game.player_y, game.target_x, game.target_y, game.nowall_x, game.nowall_y)
     action = choose_action(current_state_tensor, epsilon)
     
     next_state_tensor, reward, done = game.step(action)
