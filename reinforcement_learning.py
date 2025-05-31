@@ -12,7 +12,7 @@ import time
 
 # --- Pygame configuration---
 WIDTH, HEIGHT = 600, 600
-GRID_SIZE = 30  # Size of the cell
+GRID_SIZE = 10  # Size of the cell
 CELL_WIDTH = WIDTH // GRID_SIZE
 CELL_HEIGHT = HEIGHT // GRID_SIZE
 FPS = 60
@@ -28,10 +28,10 @@ BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 
 # --- Agent configuration ---
-SQUARE_SIZE = 30
+SQUARE_SIZE = GRID_SIZE
 
 # --- Object configuration ---
-CIRCLE_RADIUS = 15
+CIRCLE_RADIUS = GRID_SIZE/2
 
 # --- Reinforcement Learning parameters (DQN) ---
 BATCH_SIZE = 64        # Size of the batch
@@ -59,10 +59,10 @@ NUM_ACTIONS = len(ACTIONS)
 # State dimension (input for the neural network)
 STATE_SIZE = 8
 
-MODEL_PATH = 'dqn_agent_model_wall_pen2.pth' # The file of a model who was trained
+MODEL_PATH = 'dqn_agent_model_wall_pen.pth' # The file of a model who was trained
 
 # --- Option to load a model ---
-LOAD_MODEL = False
+LOAD_MODEL = True
 # CPU or GPU
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -220,6 +220,8 @@ class Game:
         self.target_x, self.target_y = get_random_position(0)
         self.nowall_x, self.nowall_y = get_random_position(1)
         self.score = 0
+        self.wall_move = 0
+        self.move_dir = 1
         self.game_over = False
 
     def reset(self):
@@ -253,6 +255,23 @@ class Game:
         
         self.player_x += dx * GRID_SIZE
         self.player_y += dy * GRID_SIZE
+
+        if self.wall_move == 3:
+            if self.move_dir == 1:
+                if self.nowall_y < HEIGHT:
+                    self.nowall_y += GRID_SIZE
+                else:
+                    self.move_dir = -1
+            if self.move_dir == -1:
+                if self.nowall_y > 0:
+                    self.nowall_y -= GRID_SIZE
+                else:
+                    self.move_dir = 1
+            self.wall_move = -1
+        self.wall_move += 1
+
+
+            
         
         # Be sure to keep the square inside the screen
         self.player_x = max(0, min(self.player_x, WIDTH - SQUARE_SIZE))
@@ -418,7 +437,7 @@ if num_episodes > 0:
 
     print("Train with DQN completed.")
 
-    MODEL_SAVE_PATH = 'dqn_agent_model_wall_pen3.pth' # Nombre del archivo para guardar
+    MODEL_SAVE_PATH = 'dqn_agent_model.pth' # Nombre del archivo para guardar
     torch.save(policy_net.state_dict(), MODEL_SAVE_PATH)
     print(f"Model saved in: {MODEL_SAVE_PATH}")
 
@@ -434,7 +453,7 @@ if num_episodes > 0:
 epsilon_simulation = EPSILON_END
 # --- Simulación después del Entrenamiento (agente entrenado) ---
 print("\n--- Completed training! Starting Simulation with DQN Agent ---")
-epsilon = 0.05 
+epsilon = 0 
 
 game = Game()
 running = True
