@@ -198,7 +198,10 @@ def wall_generator(nowall_x, nowall_y):
 class Game:
     def __init__(self):
         self.player_x, self.player_y = WIDTH-50, 100
-        self.target_x, self.target_y = 50, HEIGHT-100
+        if random.randint(0,1) == 1:
+            self.target_x, self.target_y = 50, HEIGHT-100
+        else:
+            self.target_x, self.target_y = 400, 300
         self.nowall_x, self.nowall_y = get_random_position(1)
         self.left_bool, self.right_bool, self.center_bool = 0,0,0
         self.score = 0
@@ -210,14 +213,17 @@ class Game:
         """Reset the game for a new episode."""
         self.var_start = random.randint(0,6)
         self.player_x, self.player_y = WIDTH-50, 100
-        self.target_x, self.target_y = 50, HEIGHT-100
+        if random.randint(0,1) == 1:
+            self.target_x, self.target_y = 50, HEIGHT-100
+        else:
+            self.target_x, self.target_y = 400, 300
         self.nowall_x, self.nowall_y = get_random_position(1)
         while (self.target_x == self.nowall_x):
             self.target_x, self.target_y = get_random_position(0)
             
         self.score = 0
         self.game_over = False
-        self.maze = Maze(random.randint(1,7))
+        self.maze = Maze(2)
 
     def step(self, action_index):
         """

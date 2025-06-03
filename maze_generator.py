@@ -16,15 +16,6 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT))
 clock = pygame.time.Clock()
 running = True
 
-def wall_generator(nowall_x, nowall_y):
-    wall1_x = nowall_x
-    wall1_y = 0
-    height_wall1 = nowall_y
-    wall2_x = nowall_x
-    wall2_y = nowall_y + WALL_SIZE
-    height_wall2 = HEIGHT - nowall_y - WALL_SIZE
-    return wall1_x, wall1_y, wall2_x, wall2_y+1, height_wall1-1, height_wall2
-
 def get_random_position(orientation, init_x, init_y, lenght):
     """Generate a random position in the grid."""
     if orientation == 0:
@@ -39,8 +30,8 @@ def get_random_position(orientation, init_x, init_y, lenght):
 
 class Maze:
     def __init__(self, layers):
-        self.wall1_x, self.wall1_y = get_random_position(1, 0, WALL_SIZE, CELL_WIDTH*GRID_SIZE-2*WALL_SIZE)
-        self.wall2_x, self.wall2_y = get_random_position(1, WIDTH-GRID_SIZE, WALL_SIZE,CELL_WIDTH*GRID_SIZE-2*WALL_SIZE)
+        self.wall1_x, self.wall1_y = get_random_position(1, 0, WALL_SIZE, CELL_WIDTH*GRID_SIZE-3*WALL_SIZE)
+        self.wall2_x, self.wall2_y = get_random_position(1, WIDTH-GRID_SIZE, WALL_SIZE,CELL_WIDTH*GRID_SIZE-3*WALL_SIZE)
         self.layers = layers
         self.space_between = 4
         self.top_x, self.top_y = 0, 0
